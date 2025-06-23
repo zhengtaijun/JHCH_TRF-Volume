@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 # 固定读取 GitHub 上的产品信息表（raw 格式）
-PRODUCT_INFO_URL = "https://raw.githubusercontent.com/your_user/your_repo/main/product_info.xlsx"
+PRODUCT_INFO_URL = "https://raw.githubusercontent.com/zhengtaijun/JHCH_TRF-Volume/main/product_info.xlsx"
 
 st.set_page_config(page_title="体积计算工具", layout="wide")
 st.title("📦 TRF 体积计算工具")

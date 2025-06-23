@@ -24,22 +24,28 @@ col_quantity = st.number_input("数量列号", min_value=1, value=5)
 def load_product_info():
     response = requests.get(PRODUCT_INFO_URL)
     response.raise_for_status()
+
     df = pd.read_excel(BytesIO(response.content))
 
     st.write("✅ 成功加载产品信息表，列名如下：", df.columns.tolist())
 
-    # 检查列是否存在
+    # 检查列存在性
     if "Product Name" not in df.columns or "CBM" not in df.columns:
-        raise ValueError("❌ Excel 中必须包含 'Product Name' 和 'CBM' 列")
+        raise ValueError("Excel 中必须包含 'Product Name' 和 'CBM' 两列")
 
-    # 直接从 df 提取 Series，不使用 .values（避免返回 numpy）
+    # ✅ 在 Pandas Series 上使用 fillna，再转 list
     product_names_series = df["Product Name"].fillna("").astype(str)
     cbm_series = pd.to_numeric(df["CBM"], errors="coerce").fillna(0)
 
-    # 转换为列表并构建字典
+    # ✅ 转换为列表后不再处理
     product_names = product_names_series.tolist()
     cbms = cbm_series.tolist()
-    return dict(zip(product_names, cbms)), product_names
+
+    # ✅ 构建查找字典
+    product_dict = dict(zip(product_names, cbms))
+
+    return product_dict, product_names
+
 
 
 product_dict, product_name_list = load_product_info()

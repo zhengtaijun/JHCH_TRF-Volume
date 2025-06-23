@@ -13,7 +13,8 @@ PRODUCT_INFO_URL = (
 )
 
 st.set_page_config(page_title="TRF Volume Calculator By Andy Wang", layout="centered")
-st.title("📦 TRF Volume Calculator")
+st.title("📦 Jory Henley CHC TRF Volume Calculator")
+st.caption("App author: **Andy Wang**")
 
 # ────────────────────────────────────────────────────────────────
 # FILE UPLOAD + COLUMN SETTINGS

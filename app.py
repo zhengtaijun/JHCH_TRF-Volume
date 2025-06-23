@@ -5,66 +5,86 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import requests
 
-# GitHub 上的产品信息表 raw 链接
-PRODUCT_INFO_URL = "https://raw.githubusercontent.com/zhengtaijun/JHCH_TRF-Volume/main/product_info.xlsx"
+# ────────────────────────────────────────────────────────────────
+# CONFIG
+# ────────────────────────────────────────────────────────────────
+PRODUCT_INFO_URL = (
+    "https://raw.githubusercontent.com/zhengtaijun/JHCH_TRF-Volume/main/product_info.xlsx"
+)
 
-st.set_page_config(page_title="TRF 体积计算工具", layout="centered")
-st.title("📦 TRF 体积计算工具（上传出库表，自动计算体积）")
+st.set_page_config(page_title="TRF Volume Calculator By Andy Wang", layout="centered")
+st.title("📦 TRF Volume Calculator")
 
-# 上传出库表（xlsx）
-warehouse_file = st.file_uploader("请上传仓库出库表 (Excel 文件)", type=["xlsx"])
+# ────────────────────────────────────────────────────────────────
+# FILE UPLOAD + COLUMN SETTINGS
+# ────────────────────────────────────────────────────────────────
+warehouse_file = st.file_uploader(
+    "Upload warehouse export file (Excel)", type=["xlsx"]
+)
 
-# 选择列号（1-based 显示）
-col_product = st.number_input("产品名称列号（从左往右数第几列）", min_value=1, value=3)
-col_order = st.number_input("订单号列号", min_value=1, value=7)
-col_quantity = st.number_input("数量列号", min_value=1, value=8)
+col_product = st.number_input(
+    "Column number of *Product Name* (1 = first column)", min_value=1, value=3
+)
+col_order = st.number_input(
+    "Column number of *Order Number*", min_value=1, value=7
+)
+col_quantity = st.number_input(
+    "Column number of *Quantity*", min_value=1, value=8
+)
 
-# 加载产品信息表（从 GitHub）
+# ────────────────────────────────────────────────────────────────
+# LOAD PRODUCT INFO FROM GITHUB
+# ────────────────────────────────────────────────────────────────
 @st.cache_data
 def load_product_info():
     response = requests.get(PRODUCT_INFO_URL)
     response.raise_for_status()
+
     df = pd.read_excel(BytesIO(response.content))
+    st.write("✅ Product-info file loaded. Columns found:", df.columns.tolist())
 
-    st.write("✅ 成功加载产品信息表，列名如下：", df.columns.tolist())
+    if {"Product Name", "CBM"} - set(df.columns):
+        raise ValueError("The Excel file must contain 'Product Name' and 'CBM' columns")
 
-    if "Product Name" not in df.columns or "CBM" not in df.columns:
-        raise ValueError("Excel 中必须包含 'Product Name' 和 'CBM' 两列")
+    names = df["Product Name"].fillna("").astype(str)
+    cbms = pd.to_numeric(df["CBM"], errors="coerce").fillna(0)
 
-    product_names_series = df["Product Name"].fillna("").astype(str)
-    cbm_series = pd.to_numeric(df["CBM"], errors="coerce").fillna(0)
+    product_dict = dict(zip(names.tolist(), cbms.tolist()))
+    return product_dict, names.tolist()
 
-    product_names = product_names_series.tolist()
-    cbms = cbm_series.tolist()
-    product_dict = dict(zip(product_names, cbms))
 
-    return product_dict, product_names
-
-# 加载产品信息
 product_dict, product_name_list = load_product_info()
 
-# 匹配逻辑
-def match_product(name):
+# ────────────────────────────────────────────────────────────────
+# MATCHING FUNCTION
+# ────────────────────────────────────────────────────────────────
+def match_product(name: str):
+    """Exact match first, then fuzzy match (partial_ratio ≥ 80)."""
     if name in product_dict:
         return product_dict[name]
-    match, score, _ = process.extractOne(name, product_name_list, scorer=fuzz.partial_ratio)
+    match, score, _ = process.extractOne(
+        name, product_name_list, scorer=fuzz.partial_ratio
+    )
     return product_dict[match] if score >= 80 else None
 
-# 主处理函数
+
+# ────────────────────────────────────────────────────────────────
+# MAIN PROCESSING FUNCTION
+# ────────────────────────────────────────────────────────────────
 def process_warehouse_file(file, p_col, q_col):
     df = pd.read_excel(file)
-    st.write("📊 成功读取出库表，行列数：", df.shape)
+    st.write("📊 Warehouse file loaded. Shape:", df.shape)
 
     product_names = df.iloc[:, p_col].fillna("").astype(str).tolist()
     quantities = pd.to_numeric(df.iloc[:, q_col], errors="coerce").fillna(0)
 
-    st.write("🧾 示例产品名：", product_names[:5])
-    st.write("🔢 示例数量：", quantities.head().tolist())
+    st.write("🧾 Sample product names:", product_names[:5])
+    st.write("🔢 Sample quantities:", quantities.head().tolist())
 
     total = len(product_names)
-    results = []
+    volumes: list[float | None] = []
 
-    def worker(start, end):
+    def worker(start: int, end: int):
         partial = []
         for i in range(start, end):
             name = product_names[i].strip()
@@ -73,45 +93,55 @@ def process_warehouse_file(file, p_col, q_col):
         return partial
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        step = total // 4
+        step = max(total // 4, 1)
         futures = []
         for i in range(4):
             s = i * step
             e = (i + 1) * step if i < 3 else total
             futures.append(pool.submit(worker, s, e))
         for f in futures:
-            results.extend(f.result())
+            volumes.extend(f.result())
 
-    st.write("🧮 体积匹配完成，前10项：", results[:10])
+    st.write("🧮 Volume matching done. First 10:", volumes[:10])
 
-    # ✅ 转换为 Series 再 fillna，避免 numpy 报错
-    df["Volume"] = pd.to_numeric(pd.Series(results), errors="coerce").fillna(0)
+    df["Volume"] = pd.to_numeric(pd.Series(volumes), errors="coerce").fillna(0)
     df["Total Volume"] = df["Volume"] * quantities
-    st.write("✅ Volume 列和 Total Volume 列生成完成")
+    st.write("✅ Columns ‘Volume’ and ‘Total Volume’ added")
 
     total_row = pd.DataFrame({"Total Volume": [df["Total Volume"].sum()]})
     df = pd.concat([df, total_row], ignore_index=True)
-
     return df
 
-# 开始计算
-if warehouse_file and st.button("📐 开始计算体积"):
-    with st.spinner("正在计算..."):
+
+# ────────────────────────────────────────────────────────────────
+# RUN CALCULATION
+# ────────────────────────────────────────────────────────────────
+if warehouse_file and st.button("📐 Calculate"):
+    with st.spinner("Processing…"):
         try:
-            df_result = process_warehouse_file(warehouse_file, col_product - 1, col_quantity - 1)
+            result_df = process_warehouse_file(
+                warehouse_file, col_product - 1, col_quantity - 1
+            )
 
-            st.success("✅ 计算完成！您可以下载结果文件：")
-
+            st.success("✅ Calculation complete! Download below:")
             output = BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df_result.to_excel(writer, index=False)
+                result_df.to_excel(writer, index=False)
             output.seek(0)
 
             st.download_button(
-                "📥 下载 Excel 文件",
+                "📥 Download Excel",
                 data=output,
                 file_name="TRF_Volume_Result.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
             )
         except Exception as e:
-            st.error(f"❌ 出错了：{e}")
+            st.error(f"❌ Error: {e}")
+
+# ────────────────────────────────────────────────────────────────
+# FOOTER
+# ────────────────────────────────────────────────────────────────
+st.caption("© 2025 • App author: **Andy Wang**")

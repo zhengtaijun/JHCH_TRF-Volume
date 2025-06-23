@@ -15,9 +15,9 @@ st.title("📦 TRF 体积计算工具（上传出库表，自动计算体积）"
 warehouse_file = st.file_uploader("请上传仓库出库表 (Excel 文件)", type=["xlsx"])
 
 # 选择列号（1-based 显示）
-col_product = st.number_input("产品名称列号（从左往右数第几列）", min_value=1, value=4)
-col_order = st.number_input("订单号列号", min_value=1, value=2)
-col_quantity = st.number_input("数量列号", min_value=1, value=5)
+col_product = st.number_input("产品名称列号（从左往右数第几列）", min_value=1, value=3)
+col_order = st.number_input("订单号列号", min_value=1, value=7)
+col_quantity = st.number_input("数量列号", min_value=1, value=8)
 
 # 加载产品信息表（从 GitHub）
 @st.cache_data

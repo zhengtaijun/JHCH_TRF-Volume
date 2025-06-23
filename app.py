@@ -28,12 +28,19 @@ def load_product_info():
 
     st.write("✅ 成功加载产品信息表，列名如下：", df.columns.tolist())
 
+    # 检查列是否存在
     if "Product Name" not in df.columns or "CBM" not in df.columns:
         raise ValueError("❌ Excel 中必须包含 'Product Name' 和 'CBM' 列")
 
-    product_names = df["Product Name"].fillna("").astype(str).tolist()
-    cbms = df["CBM"].fillna(0).tolist()
+    # 直接从 df 提取 Series，不使用 .values（避免返回 numpy）
+    product_names_series = df["Product Name"].fillna("").astype(str)
+    cbm_series = pd.to_numeric(df["CBM"], errors="coerce").fillna(0)
+
+    # 转换为列表并构建字典
+    product_names = product_names_series.tolist()
+    cbms = cbm_series.tolist()
     return dict(zip(product_names, cbms)), product_names
+
 
 product_dict, product_name_list = load_product_info()
 

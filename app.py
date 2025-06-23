@@ -24,30 +24,23 @@ col_quantity = st.number_input("数量列号", min_value=1, value=5)
 def load_product_info():
     response = requests.get(PRODUCT_INFO_URL)
     response.raise_for_status()
-
     df = pd.read_excel(BytesIO(response.content))
 
     st.write("✅ 成功加载产品信息表，列名如下：", df.columns.tolist())
 
-    # 检查列存在性
     if "Product Name" not in df.columns or "CBM" not in df.columns:
         raise ValueError("Excel 中必须包含 'Product Name' 和 'CBM' 两列")
 
-    # ✅ 在 Pandas Series 上使用 fillna，再转 list
     product_names_series = df["Product Name"].fillna("").astype(str)
     cbm_series = pd.to_numeric(df["CBM"], errors="coerce").fillna(0)
 
-    # ✅ 转换为列表后不再处理
     product_names = product_names_series.tolist()
     cbms = cbm_series.tolist()
-
-    # ✅ 构建查找字典
     product_dict = dict(zip(product_names, cbms))
 
     return product_dict, product_names
 
-
-
+# 加载产品信息
 product_dict, product_name_list = load_product_info()
 
 # 匹配逻辑
@@ -60,8 +53,13 @@ def match_product(name):
 # 主处理函数
 def process_warehouse_file(file, p_col, q_col):
     df = pd.read_excel(file)
+    st.write("📊 成功读取出库表，行列数：", df.shape)
+
     product_names = df.iloc[:, p_col].fillna("").astype(str).tolist()
     quantities = pd.to_numeric(df.iloc[:, q_col], errors="coerce").fillna(0)
+
+    st.write("🧾 示例产品名：", product_names[:5])
+    st.write("🔢 示例数量：", quantities.head().tolist())
 
     total = len(product_names)
     results = []
@@ -84,10 +82,13 @@ def process_warehouse_file(file, p_col, q_col):
         for f in futures:
             results.extend(f.result())
 
-    df["Volume"] = pd.to_numeric(results, errors="coerce").fillna(0)
-    df["Total Volume"] = df["Volume"] * quantities
+    st.write("🧮 体积匹配完成，前10项：", results[:10])
 
-    # 总体积行
+    # ✅ 转换为 Series 再 fillna，避免 numpy 报错
+    df["Volume"] = pd.to_numeric(pd.Series(results), errors="coerce").fillna(0)
+    df["Total Volume"] = df["Volume"] * quantities
+    st.write("✅ Volume 列和 Total Volume 列生成完成")
+
     total_row = pd.DataFrame({"Total Volume": [df["Total Volume"].sum()]})
     df = pd.concat([df, total_row], ignore_index=True)
 
